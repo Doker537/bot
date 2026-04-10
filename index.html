@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python Debugger Pro</title>
+    <style>
+        /* Стиль остается прежним (из предыдущего ответа), добавляем только индикатор сохранения */
+        :root {
+            --bg-color: #0b0f19; --surface-color: #111827; --border-color: #1f2937;
+            --text-main: #f3f4f6; --text-muted: #9ca3af; --accent-blue: #3b82f6;
+            --accent-glow: rgba(59, 130, 246, 0.4); --error-red: #ef4444; --success-green: #10b981;
+            --font-ui: system-ui, sans-serif; --font-code: 'JetBrains Mono', monospace;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background-color: var(--bg-color); color: var(--text-main); font-family: var(--font-ui); padding: 2rem 1rem; }
+        .container { max-width: 900px; margin: 0 auto; }
+        header { text-align: center; margin-bottom: 3rem; }
+        .progress-bar { position: sticky; top: 1rem; background: var(--surface-color); border: 1px solid var(--border-color); padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; z-index: 100; border-radius: 4px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); margin-bottom: 2rem; font-family: var(--font-code); }
+        .task-card { background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 4px; padding: 1.5rem; margin-bottom: 1.5rem; transition: all 0.3s ease; }
+        .task-card.success { border-color: var(--success-green); opacity: 0.8; }
+        .task-header { margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; }
+        .status-badge { font-size: 0.8rem; padding: 0.2rem 0.6rem; border-radius: 2px; background: #374151; }
+        .status-badge.correct { background: var(--success-green); }
+        .workspace { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+        pre, textarea { font-family: var(--font-code); font-size: 0.9rem; padding: 1rem; background: #000; border: 1px solid var(--border-color); border-radius: 4px; color: #e5e7eb; width: 100%; height: 120px; }
+        .btn { background: var(--surface-color); color: var(--text-main); border: 1px solid var(--border-color); padding: 0.6rem 1.2rem; cursor: pointer; border-radius: 2px; }
+        .btn:hover { background: var(--accent-blue); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .final-form { background: var(--surface-color); border: 1px solid var(--border-color); padding: 2rem; margin-top: 3rem; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group input { width: 100%; padding: 0.8rem; background: #000; border: 1px solid var(--border-color); color: #fff; }
+        .btn-submit { width: 100%; background: var(--accent-blue); color: white; border: none; padding: 1rem; font-weight: bold; cursor: pointer; }
+        @media (max-width: 768px) { .workspace { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>Python Debugger <span style="font-size: 0.5em; vertical-align: middle; color: var(--accent-blue);">PERSISTENT</span></h1>
+        <p style="color: var(--text-muted)">Ваш прогресс сохраняется автоматически.</p>
+    </header>
+
+    <div class="progress-bar">
+        <span>Прогресс:</span>
+        <span id="score-counter">0 / 20</span>
+    </div>
+
+    <div id="tasks-container"></div>
+
+    <div class="final-form">
+        <h2>Отправить результат</h2>
+        <form id="results-form">
+            <div class="form-group"><input type="text" id="firstName" required placeholder="Имя"></div>
+            <div class="form-group"><input type="text" id="lastName" required placeholder="Фамилия"></div>
+            <button type="submit" id="submit-btn" class="btn-submit">ОТПРАВИТЬ В VK</button>
+        </form>
+    </div>
+</div>
+
+<script>
+const tasks = [
+    // --- Базовый уровень (1-20) ---
+    { id: 1, type: "Синтаксис", bad: 'if x > 5\n    print("Больше")', good: 'if x > 5:\n    print("Больше")' },
+    { id: 2, type: "Синтаксис", bad: 'print("Привет мир)', good: 'print("Привет мир")' },
+    { id: 3, type: "Отступы", bad: 'def greet():\nprint("Hello")', good: 'def greet():\n    print("Hello")' },
+    { id: 4, type: "Условия", bad: 'x = 10\nif x = 10:\n    print("Десять")', good: 'x = 10\nif x == 10:\n    print("Десять")' },
+    { id: 5, type: "Циклы", bad: 'for i in range(5)\n    print(i)', good: 'for i in range(5):\n    print(i)' },
+    { id: 6, type: "Списки", bad: 'my_list = [1 2 3]', good: 'my_list = [1, 2, 3]' },
+    { id: 7, type: "Переменные", bad: 'name = "Alice"\nprint(Name)', good: 'name = "Alice"\nprint(name)' },
+    { id: 8, type: "Функции", bad: 'def add(a, b):\n    a + b', good: 'def add(a, b):\n    return a + b' },
+    { id: 9, type: "Циклы", bad: 'while True\n    pass', good: 'while True:\n    pass' },
+    { id: 10, type: "Словари", bad: 'data = {"age" 25, "city" "Мск"}', good: 'data = {"age": 25, "city": "Мск"}' },
+    { id: 11, type: "Импорты", bad: 'import math from', good: 'from math import *' },
+    { id: 12, type: "Типы", bad: 'print("Age: " + 25)', good: 'print("Age: " + str(25))' },
+    { id: 13, type: "Операторы", bad: 'count = 0\ncount =+ 1', good: 'count = 0\ncount += 1' },
+    { id: 14, type: "Булевы", bad: 'is_active = true', good: 'is_active = True' },
+    { id: 15, type: "Методы", bad: 'print(lenght([1, 2]))', good: 'print(len([1, 2]))' },
+    { id: 16, type: "Синтаксис", bad: 'fruits = ["apple", "banana"\nprint(fruits)', good: 'fruits = ["apple", "banana"]\nprint(fruits)' },
+    { id: 17, type: "Ввод", bad: 'age = input("Возраст: ")\nif age > 18:\n    pass', good: 'age = int(input("Возраст: "))\nif age > 18:\n    pass' },
+    { id: 18, type: "Оформление", bad: 'def my_func() {}', good: 'def my_func():\n    pass' },
+    { id: 19, type: "Кортежи", bad: 'colors = ("red", "blue")\ncolors[0] = "green"', good: 'colors = ["red", "blue"]\ncolors[0] = "green"' },
+    { id: 20, type: "Строки", bad: 'print(Hello)', good: 'print("Hello")' },
+
+    // --- Продвинутый уровень (21-50) ---
+    { id: 21, type: "Исключения", bad: 'try:\n    1 / 0\ncatch ZeroDivisionError:\n    pass', good: 'try:\n    1 / 0\nexcept ZeroDivisionError:\n    pass' },
+    { id: 22, type: "ООП (Классы)", bad: 'class User:\n    pass\nu = new User()', good: 'class User:\n    pass\nu = User()' },
+    { id: 23, type: "ООП (Методы)", bad: 'class Cat:\n    def meow():\n        print("Мяу")', good: 'class Cat:\n    def meow(self):\n        print("Мяу")' },
+    { id: 24, type: "Аргументы", bad: 'def calc(a, b=0, c):\n    return a + b + c', good: 'def calc(a, c, b=0):\n    return a + b + c' },
+    { id: 25, type: "Лямбды", bad: 'f = lambda x: return x * 2', good: 'f = lambda x: x * 2' },
+    { id: 26, type: "Множества", bad: 'my_set = {}\nmy_set.add(1)', good: 'my_set = set()\nmy_set.add(1)' },
+    { id: 27, type: "Файлы (Запись)", bad: 'f = open("data.txt")\nf.write("Привет")', good: 'f = open("data.txt", "w")\nf.write("Привет")' },
+    { id: 28, type: "Контекст", bad: 'with open("file.txt") as f\n    data = f.read()', good: 'with open("file.txt") as f:\n    data = f.read()' },
+    { id: 29, type: "List Comprehension", bad: 'nums = [x for x in range(5) if x > 2:]', good: 'nums = [x for x in range(5) if x > 2]' },
+    { id: 30, type: "NoneType", bad: 'if result == None:\n    print("Пусто")', good: 'if result is None:\n    print("Пусто")' },
+    { id: 31, type: "Ключи словаря", bad: 'data = {[1, 2]: "coords"}', good: 'data = {(1, 2): "coords"}' },
+    { id: 32, type: "F-строки", bad: 'name = "Иван"\nprint(f"Привет, {Name}")', good: 'name = "Иван"\nprint(f"Привет, {name}")' },
+    { id: 33, type: "Сравнение", bad: 'if is_valid = True:\n    pass', good: 'if is_valid == True:\n    pass' },
+    { id: 34, type: "Логические", bad: 'if x > 5 and or x < 10:\n    pass', good: 'if x > 5 or x < 10:\n    pass' },
+    { id: 35, type: "Импорты 2", bad: 'import random.randint', good: 'from random import randint' },
+    { id: 36, type: "Доступ к словарю", bad: 'user = {"name": "Bob"}\nprint(user.name)', good: 'user = {"name": "Bob"}\nprint(user["name"])' },
+    { id: 37, type: "Имена переменных", bad: '1st_place = "John"', good: 'first_place = "John"' },
+    { id: 38, type: "Область видимости", bad: 'count = 0\ndef inc():\n    count += 1\ninc()', good: 'count = 0\ndef inc():\n    global count\n    count += 1\ninc()' },
+    { id: 39, type: "Преобразования", bad: 'num = int("10.5")', good: 'num = float("10.5")' },
+    { id: 40, type: "Инкремент", bad: 'x = 5\nx++', good: 'x = 5\nx += 1' },
+    { id: 41, type: "Вызов метода", bad: 'text = "hello"\nprint(text.upper)', good: 'text = "hello"\nprint(text.upper())' },
+    { id: 42, type: "Распаковка", bad: 'a, b = [1, 2, 3]', good: 'a, b, c = [1, 2, 3]' },
+    { id: 43, type: "Join строк", bad: 'res = "-".join(1, 2, 3)', good: 'res = "-".join(["1", "2", "3"])' },
+    { id: 44, type: "Индексы", bad: 'arr = [10, 20]\nprint(arr[2])', good: 'arr = [10, 20]\nprint(arr[1])' },
+    { id: 45, type: "Копирование", bad: 'a = [1, 2]\nb = a\nb.append(3)\n# Как сделать копию?', good: 'a = [1, 2]\nb = a.copy()\nb.append(3)' },
+    { id: 46, type: "Декораторы", bad: '@timer\ndef my_func:\n    pass', good: '@timer\ndef my_func():\n    pass' },
+    { id: 47, type: "Тернарный", bad: 'status = "OK" if code == 200 else status = "Error"', good: 'status = "OK" if code == 200 else "Error"' },
+    { id: 48, type: "Continue", bad: 'for i in range(5):\n    if i == 2:\n        pass\n    print(i)', good: 'for i in range(5):\n    if i == 2:\n        continue\n    print(i)' },
+    { id: 49, type: "Память списка", bad: 'def add_item(val, lst=[]):\n    lst.append(val)', good: 'def add_item(val, lst=None):\n    if lst is None:\n        lst = []\n    lst.append(val)' },
+    { id: 50, type: "Магические", bad: 'class Box:\n    def init(self):\n        self.items = []', good: 'class Box:\n    def __init__(self):\n        self.items = []' }
+];
+    let solvedIds = [];
+
+    // Загрузка прогресса
+    function loadProgress() {
+        const saved = localStorage.getItem('python_debug_progress');
+        if (saved) {
+            solvedIds = JSON.parse(saved);
+            updateScoreUI();
+        }
+    }
+
+    // Сохранение прогресса
+    function saveProgress() {
+        localStorage.setItem('python_debug_progress', JSON.stringify(solvedIds));
+    }
+
+    function updateScoreUI() {
+        document.getElementById('score-counter').textContent = `${solvedIds.length} / ${tasks.length}`;
+    }
+
+    function normalize(code) {
+        return code.trim().replace(/\s+/g, '').replace(/'/g, '"');
+    }
+
+    function render() {
+        const container = document.getElementById('tasks-container');
+        tasks.forEach(task => {
+            const isSolved = solvedIds.includes(task.id);
+            const card = document.createElement('div');
+            card.className = `task-card ${isSolved ? 'success' : ''}`;
+            card.id = `card-${task.id}`;
+            card.innerHTML = `
+                <div class="task-header">
+                    <span>Задание #${task.id} (${task.type})</span>
+                    <span class="status-badge ${isSolved ? 'correct' : ''}" id="status-${task.id}">
+                        ${isSolved ? 'РЕШЕНО' : 'ОЖИДАНИЕ'}
+                    </span>
+                </div>
+                <div class="workspace">
+                    <pre>${task.bad}</pre>
+                    <textarea id="input-${task.id}" ${isSolved ? 'disabled' : ''} placeholder="Исправьте код...">${isSolved ? task.good : ''}</textarea>
+                </div>
+                <button class="btn" id="btn-${task.id}" ${isSolved ? 'disabled' : ''} onclick="check(${task.id})">Проверить</button>
+            `;
+            container.appendChild(card);
+        });
+    }
+
+    window.check = function(id) {
+        const task = tasks.find(t => t.id === id);
+        const input = document.getElementById(`input-${id}`).value;
+        
+        if (normalize(input) === normalize(task.good)) {
+            solvedIds.push(id);
+            document.getElementById(`card-${id}`).classList.add('success');
+            document.getElementById(`status-${id}`).textContent = 'ВЕРНО';
+            document.getElementById(`status-${id}`).classList.add('correct');
+            document.getElementById(`btn-${id}`).disabled = true;
+            document.getElementById(`input-${id}`).disabled = true;
+            saveProgress();
+            updateScoreUI();
+        } else {
+            alert('Ошибка в коде. Попробуй еще раз!');
+        }
+    };
+
+    // Отправка в VK через ваш Backend
+    document.getElementById('results-form').onsubmit = async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('submit-btn');
+        const data = {
+            firstName: document.getElementById('firstName').value,
+            lastName: document.getElementById('lastName').value,
+            score: solvedIds.length
+        };
+
+        btn.disabled = true;
+        btn.textContent = 'ОТПРАВКА...';
+
+        try {
+            // ЗАМЕНИТЕ URL на адрес вашего запущенного Python-сервера
+            const response = await fetch('http://127.0.0.1:5000/send_to_vk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                alert('Результаты успешно отправлены учителю!');
+            } else {
+                throw new Error();
+            }
+        } catch (err) {
+            alert('Ошибка отправки. Убедитесь, что Python-сервер запущен.');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'ОТПРАВИТЬ В VK';
+        }
+    };
+
+    loadProgress();
+    render();
+</script>
+</body>
+</html>
