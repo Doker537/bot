@@ -196,7 +196,7 @@ const tasks = [
 
         try {
             // ЗАМЕНИТЕ URL на адрес вашего запущенного Python-сервера
-            const response = await fetch('http://127.0.0.1:5000/send_to_vk', {
+            const response = await fetch('https://bot-b3yt.onrender.com/send_to_vk', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
